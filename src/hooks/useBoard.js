@@ -75,3 +75,38 @@ export function useBoard() {
 
   return { generateBoard, loadBoard, toggleCell, deleteBoard, savedBoards }
 }
+
+/**
+ * Live subscription to a single board and its cells.
+ * Re-renders automatically whenever any cell's marked state changes.
+ * @param {number|undefined} boardId
+ * @returns {{ board: object|undefined, cells: object[]|undefined, toggleCell: Function }}
+ */
+export function useBoardLive(boardId) {
+  const [board, setBoard] = useState(undefined)
+  const [cells, setCells] = useState(undefined)
+
+  useEffect(() => {
+    if (!boardId) return
+    const sub = liveQuery(async () => {
+      const [b, cs] = await Promise.all([
+        db.boards.get(boardId),
+        db.cells.where('boardId').equals(boardId).toArray(),
+      ])
+      return {
+        board: b,
+        cells: cs.sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col),
+      }
+    }).subscribe({
+      next: ({ board: b, cells: cs }) => { setBoard(b); setCells(cs) },
+      error: err => console.error('useBoardLive:', err),
+    })
+    return () => sub.unsubscribe()
+  }, [boardId])
+
+  async function toggleCell(cellId, currentMarked) {
+    await db.cells.update(cellId, { marked: !currentMarked })
+  }
+
+  return { board, cells, toggleCell }
+}
