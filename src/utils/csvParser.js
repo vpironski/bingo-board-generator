@@ -88,9 +88,10 @@ function tokenize(str) {
  * Parses a raw CSV string into valid Entry objects and a list of skipped row reasons.
  * Accepts difficulty as label (Easy/Medium/Hard/Insane, case-insensitive) or number (1–4).
  * Skips the header row if present (first field lowercased === "name").
+ * Supports both "Category" (singular, wraps in array) and "Categories" (pipe-separated array) headers.
  *
  * @param {string} rawString
- * @returns {{ valid: Array<{name: string, category: string, difficulty: number}>, skipped: string[] }}
+ * @returns {{ valid: Array<{name: string, categories: string[], difficulty: number}>, skipped: string[] }}
  */
 export function parseCSV(rawString) {
   if (!rawString?.trim()) return { valid: [], skipped: [] }
@@ -100,10 +101,12 @@ export function parseCSV(rawString) {
 
   if (!rows.length) return { valid: [], skipped: [] }
 
-  // Detect and skip header row; track offset so line numbers in skip reasons are accurate
+  // Detect and skip header row; determine if categories are multi (pipe-separated) or single
   let dataRows = rows
-  let lineOffset = 1 // line number of first data row (1-indexed)
+  let lineOffset = 1
+  let multiCategory = false
   if (rows[0][0]?.trim().toLowerCase() === 'name') {
+    multiCategory = rows[0][1]?.trim().toLowerCase() === 'categories'
     dataRows = rows.slice(1)
     lineOffset = 2
   }
@@ -120,14 +123,23 @@ export function parseCSV(rawString) {
     }
 
     const name = row[0].trim()
-    const category = row[1].trim()
+    const catRaw = row[1].trim()
     const diffRaw = row[2].trim().toLowerCase()
 
     if (!name) {
       skipped.push(`Line ${lineNum}: name is empty`)
       return
     }
-    if (!category) {
+    if (!catRaw) {
+      skipped.push(`Line ${lineNum}: category is empty`)
+      return
+    }
+
+    const categories = multiCategory
+      ? catRaw.split('|').map(c => c.trim()).filter(Boolean)
+      : [catRaw]
+
+    if (categories.length === 0) {
       skipped.push(`Line ${lineNum}: category is empty`)
       return
     }
@@ -138,7 +150,7 @@ export function parseCSV(rawString) {
       return
     }
 
-    valid.push({ name, category, difficulty })
+    valid.push({ name, categories, difficulty })
   })
 
   return { valid, skipped }
@@ -151,10 +163,10 @@ export function parseCSV(rawString) {
  */
 export function generateTemplate() {
   return [
-    'Name,Category,Difficulty',
+    'Name,Categories,Difficulty',
     'Eiffel Tower,Paris,Easy',
-    'Mount Fuji,Japan,Hard',
-    'Pasta Carbonara,Food,Medium',
+    'Mount Fuji,Japan|Asia,Hard',
+    'Pasta Carbonara,Food|Italian,Medium',
   ].join('\r\n') + '\r\n'
 }
 

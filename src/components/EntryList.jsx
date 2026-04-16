@@ -43,7 +43,11 @@ export default function EntryList({ entries, onEdit, onDelete }) {
         >
           <div className="flex-1 min-w-0">
             <p className="text-gray-900 font-medium text-sm truncate">{entry.name}</p>
-            <p className="text-gray-400 text-xs truncate mt-0.5">{entry.category}</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(entry.categories ?? []).map(cat => (
+                <span key={cat} className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{cat}</span>
+              ))}
+            </div>
           </div>
           <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${DIFF_META[entry.difficulty]?.color}`}>
             {DIFF_META[entry.difficulty]?.label}

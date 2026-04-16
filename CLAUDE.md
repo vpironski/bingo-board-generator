@@ -4,7 +4,7 @@
 
 A personal PWA (Progressive Web App) that runs as a **standalone app on iPhone** — installed via Safari "Add to Home Screen," launches fullscreen with no browser UI, and works entirely offline. Not intended for public release.
 
-Users can input entries one-by-one or in bulk, each with a **name**, **category**, and **difficulty**. The app generates bingo boards of variable size (3×3, 5×5, 7×7, 9×9, etc.) using a placement algorithm that arranges entries by category and/or difficulty. Boards are interactive (tap squares to mark them) and exportable as images to share.
+Users can input entries one-by-one or in bulk, each with a **name**, one or more **categories**, and a **difficulty**. The app generates bingo boards of variable size (3×3, 5×5, 7×7, 9×9, etc.) using a placement algorithm that arranges entries by category and/or difficulty. Boards are interactive (tap squares to mark them) and exportable as images to share.
 
 All data is persisted locally on the device via **IndexedDB** — entries and boards survive every app restart and relaunch indefinitely.
 
@@ -29,13 +29,13 @@ Fast development, component reusability, and if the decision is ever made to mig
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Framework | React 18 + Vite | Fast dev, PWA-ready, portable to React Native |
-| Styling | Tailwind CSS | Mobile-first utility classes, no custom CSS overhead |
-| Database | IndexedDB via `Dexie.js` | Persistent, structured, queryable, on-device |
+| Framework | React 19 + Vite 8 | Fast dev, PWA-ready, portable to React Native |
+| Styling | Tailwind CSS v4 | Mobile-first utility classes; no config file — imported via `@import "tailwindcss"` in CSS |
+| Database | IndexedDB via `Dexie.js` v4 | Persistent, structured, queryable, on-device |
 | State | `useState` / `useReducer` + React Context | No external lib needed at this scale |
 | Image Export | `html2canvas` | Renders board DOM node as PNG → iPhone share sheet |
 | PWA | `vite-plugin-pwa` | Service worker, offline support, installable |
-| Routing | React Router v6 | Simple multi-view navigation |
+| Routing | React Router v7 | Simple multi-view navigation |
 | Hosting | GitHub Pages | Free, permanent, zero config after setup |
 
 No backend. No server. No accounts. Everything lives on the device.
@@ -77,8 +77,7 @@ bingo-generator/
 │   ├── App.jsx
 │   └── main.jsx
 ├── CLAUDE.md                    # This file
-├── vite.config.js               # Includes vite-plugin-pwa config
-├── tailwind.config.js
+├── vite.config.js               # Includes vite-plugin-pwa config + Tailwind 4 plugin
 └── package.json
 ```
 
@@ -86,21 +85,17 @@ bingo-generator/
 
 ## Database Schema (`src/db/db.js`)
 
-Uses **Dexie.js** wrapping IndexedDB. Three tables:
+Uses **Dexie.js** wrapping IndexedDB. Three tables, currently at **version 4**:
 
 ```js
-import Dexie from 'dexie';
-
-export const db = new Dexie('BingoGeneratorDB');
-
-db.version(1).stores({
-  entries: '++id, name, category, difficulty, createdAt',
-  boards:  '++id, size, mode, createdAt',
+db.version(4).stores({
+  entries: '++id, name, *categories, difficulty, createdAt',
+  boards:  '++id, size, mode, difficulty, spread, freeCenter, createdAt',
   cells:   '++id, boardId, row, col, entryId, marked'
-});
+})
 ```
 
-- `entries` — the master pool of user-defined bingo items
+- `entries` — the master pool of user-defined bingo items; `*categories` is a Dexie multi-entry index (each array element indexed separately)
 - `boards` — metadata for each generated board
 - `cells` — each individual cell on a board, linked to `boardId`; `marked` is updated in place when user taps
 
@@ -114,11 +109,11 @@ db.version(1).stores({
 
 ```js
 {
-  id: number,          // auto-incremented by Dexie
-  name: string,        // e.g. "Eiffel Tower"
-  category: string,    // e.g. "Sofia", "Trip", "Food"
+  id: number,               // auto-incremented by Dexie
+  name: string,             // e.g. "Eiffel Tower"
+  categories: string[],     // e.g. ["Sofia Center", "Streets"] — at least one required
   difficulty: 1 | 2 | 3 | 4, // 1=Easy, 2=Medium, 3=Hard, 4=Insane
-  createdAt: string           // ISO timestamp
+  createdAt: string         // ISO timestamp
 }
 ```
 
@@ -130,6 +125,8 @@ db.version(1).stores({
   size: number,        // e.g. 5 for a 5x5 board
   mode: "category" | "category+difficulty",
   difficulty: 1 | 2 | 3 | 4, // board difficulty setting — drives entry spread (see DIFFICULTY_SPREAD)
+  spread: "A" | "B" | "C" | "D", // placement pattern (only relevant for category+difficulty mode)
+  freeCenter: boolean, // whether the center cell is a FREE space
   createdAt: string
 }
 ```
@@ -138,19 +135,19 @@ db.version(1).stores({
 
 ```js
 {
-  id: number,          // auto-incremented
-  boardId: number,     // FK -> boards.id
-  row: number,         // 0-indexed
-  col: number,         // 0-indexed
-  entryId: number,     // FK -> entries.id (null for FREE space)
-  name: string,        // denormalized for fast render without joins
-  category: string,    // denormalized
-  difficulty: number,  // denormalized
-  marked: boolean      // toggled on tap; persisted immediately
+  id: number,           // auto-incremented
+  boardId: number,      // FK -> boards.id
+  row: number,          // 0-indexed
+  col: number,          // 0-indexed
+  entryId: number|null, // FK -> entries.id (null for FREE space)
+  name: string,         // denormalized for fast render without joins
+  categories: string[], // denormalized
+  difficulty: number|null, // denormalized (null for FREE space)
+  marked: boolean       // toggled on tap; persisted immediately
 }
 ```
 
-Denormalizing `name`, `category`, `difficulty` into `cells` avoids join queries on every render. The source of truth for entry data is still `entries`.
+Denormalizing `name`, `categories`, `difficulty` into `cells` avoids join queries on every render. The source of truth for entry data is still `entries`.
 
 ---
 
@@ -158,25 +155,31 @@ Denormalizing `name`, `category`, `difficulty` into `cells` avoids join queries 
 
 ### Mode 1: Category Only
 
-1. Group entries by category.
-2. Shuffle within each category group (Fisher-Yates).
-3. Fill the grid left-to-right, top-to-bottom, round-robin across category groups so adjacent squares vary.
-4. If pool < `size²`: cycle through pool repeatedly to fill. If pool > `size²`: take a proportional slice from each category.
-5. Place FREE space at center cell for odd-sized boards.
+1. Group entries by primary category (`categoryGrouper.js` — Fisher-Yates shuffles each group).
+2. Round-robin interleave across category groups until `realCells` entries collected (cycles if pool is smaller).
+3. Scatter pool randomly across all positions (spread B behaviour always used in category mode).
+4. If `freeCenter`, insert FREE cell at center.
 
 ### Mode 2: Category + Difficulty
 
-1. Determine the target cell count per difficulty bucket using `DIFFICULTY_SPREAD[boardDifficulty]` (see table below).
-2. Sample entries from each bucket proportionally. If a bucket is undersized, redistribute its deficit to the nearest neighbouring bucket(s).
-3. Shuffle each bucket (Fisher-Yates).
-4. Group sampled entries by category, then interleave round-robin across categories to avoid clustering.
-5. Apply a **diagonal difficulty gradient**: easier entries placed towards top-left, harder entries towards bottom-right.
-6. Run `difficultyBalancer.js` — swaps cells to ensure no single row or column is all-same-difficulty.
-7. Place FREE space at center cell with `marked: true`.
+1. Compute target cell count per difficulty bucket from `DIFFICULTY_SPREAD[boardDifficulty]` (largest-remainder rounding).
+2. Sample entries from each bucket via `cycleToFill`. If a bucket is empty, redistribute its deficit to the nearest non-empty neighbour.
+3. Interleave sampled entries round-robin by category to avoid clustering.
+4. Apply the chosen **spread pattern** (A–D) — see below.
+5. If `freeCenter`, insert FREE cell (`entryId: null, difficulty: null, marked: true`) at center.
 
-### Difficulty Spread Table (`src/logic/boardBuilder.js → DIFFICULTY_SPREAD`)
+### Spread Patterns
 
-The board difficulty selector controls which entry difficulties are pulled and in what proportion:
+| Spread | Behaviour |
+|---|---|
+| A | Diagonal gradient — sort pool by difficulty ascending, assign to positions sorted by `row+col` ascending. Easy entries → top-left, Hard → bottom-right. |
+| B | Random scatter — Fisher-Yates shuffle positions, assign pool in order. |
+| C | Row progression — sort pool by difficulty ascending, assign row by row (shuffle within each row). |
+| D | Balanced random — scatter randomly, then run `difficultyBalancer.js` to ensure no row or column is entirely one difficulty. |
+
+In **category mode**, spread/difficulty pickers are hidden and scatter (B) is always used.
+
+### Difficulty Spread Table (`DIFFICULTY_SPREAD`)
 
 | Board difficulty | Easy (1) | Medium (2) | Hard (3) | Insane (4) |
 |---|---|---|---|---|
@@ -185,25 +188,27 @@ The board difficulty selector controls which entry difficulties are pulled and i
 | Hard | — | 20% | 50% | 30% |
 | Insane | — | 5% | 30% | 65% |
 
-**Rationale:** Every board has neighbouring-difficulty entries so no difficulty tier feels totally isolated. Easy boards are still accessible but have Medium variety. Insane boards are brutal but not monotone.
+**Rationale:** Every board has neighbouring-difficulty entries so no difficulty tier feels totally isolated.
 
 ### Hard Constraints
 
-- Grid must always be fully filled. No empty cells except the FREE space.
-- Center cell of every odd-sized board is always FREE (`entryId: null, marked: true`).
-- Best-effort: no two entries of the same category share the same row AND same column.
-- Minimum viable pool: at least `Math.ceil(size² / 2)` unique entries recommended. Warn the user if the pool is too small.
+- Grid must always be fully filled. No empty cells except the optional FREE space.
+- FREE center cell: `entryId: null, difficulty: null, marked: true` — toggled by user option, not automatic.
+- Minimum viable pool: at least `Math.ceil(realCells / 2)` unique entries recommended. UI warns if pool is too small but does not block generation (entries cycle to fill).
 
 ---
 
 ## Key Behaviours
 
 - **Tap a square** → toggles `marked` → cell turns red → immediately persisted via `db.cells.update(id, { marked })`.
-- **Long-press a square** → bottom sheet shows entry detail: name, category, difficulty badge.
+- **Long-press a square** → bottom sheet shows entry detail: name, categories, difficulty badge. *(Planned — F5)*
 - **Export** → `html2canvas` captures the board `<div>` as PNG → triggers native iOS share sheet (save to Photos, share to iMessage, etc.).
-- **Bulk import** → paste CSV or plain text, one entry per line: `Name, Category, Difficulty`. Parser strips whitespace, validates difficulty is 1–4 (Easy/Medium/Hard/Insane), skips malformed rows and reports them to the user.
-- **Board size picker** → 3, 5, 7, 9 (odd only, enforced in UI).
-- **Board difficulty picker** → Easy / Medium / Hard / Insane. Controls entry spread via `DIFFICULTY_SPREAD` — not just which entries are included but the proportion from each level (see Difficulty Spread Table above).
+- **Bulk import** → upload a CSV file using the template. Format: `Name,Categories,Difficulty`. Multiple categories pipe-separated: `Cat1|Cat2`. Parser strips whitespace, validates difficulty (Easy/Medium/Hard/Insane or 1–4), skips malformed rows with a report. Also accepts legacy single-`Category` header for backwards compat.
+- **Board size picker** → 3×3, 5×5, 7×7, 9×9 (odd only, enforced in UI).
+- **Board mode picker** → Category (scatter by category variety) or Category + Difficulty (spread pattern + difficulty sampling).
+- **Board difficulty picker** (category+difficulty mode only) → Easy / Medium / Hard / Insane. Controls entry proportion via `DIFFICULTY_SPREAD`.
+- **Spread picker** (category+difficulty mode only) → A / B / C / D (see Spread Patterns table).
+- **Free center toggle** → shows/hides a FREE cell at the board center. Independent of mode.
 - **Saved entries** → the entry pool is always persisted. It is the core dataset of the app. Entries are never ephemeral.
 - **Saved boards** → generated boards also persist, but are secondary. A board can always be regenerated from entries; entries cannot be regenerated from boards.
 - **Delete entry** → warns if the entry is used in any saved board before deleting. Never silently delete.

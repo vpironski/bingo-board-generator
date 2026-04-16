@@ -3,7 +3,7 @@ import { liveQuery } from 'dexie'
 import { db } from '../db/db'
 
 /**
- * @typedef {{ id: number, name: string, category: string, difficulty: number, createdAt: string }} Entry
+ * @typedef {{ id: number, name: string, categories: string[], difficulty: number, createdAt: string }} Entry
  */
 
 export function useEntries() {
@@ -19,21 +19,21 @@ export function useEntries() {
     return () => sub.unsubscribe()
   }, [])
 
-  /** @param {{ name: string, category: string, difficulty: number }} data */
-  async function addEntry({ name, category, difficulty }) {
+  /** @param {{ name: string, categories: string[], difficulty: number }} data */
+  async function addEntry({ name, categories, difficulty }) {
     await db.entries.add({
       name: name.trim(),
-      category: category.trim(),
+      categories: categories.map(c => c.trim()).filter(Boolean),
       difficulty,
       createdAt: new Date().toISOString()
     })
   }
 
-  /** @param {number} id @param {{ name: string, category: string, difficulty: number }} data */
-  async function updateEntry(id, { name, category, difficulty }) {
+  /** @param {number} id @param {{ name: string, categories: string[], difficulty: number }} data */
+  async function updateEntry(id, { name, categories, difficulty }) {
     await db.entries.update(id, {
       name: name.trim(),
-      category: category.trim(),
+      categories: categories.map(c => c.trim()).filter(Boolean),
       difficulty
     })
   }
@@ -58,8 +58,11 @@ export function useEntries() {
   function exportCSV() {
     if (!entries?.length) return
     const rows = [
-      'Name,Category,Difficulty',
-      ...entries.map(e => `"${e.name.replace(/"/g, '""')}","${e.category.replace(/"/g, '""')}",${e.difficulty}`)
+      'Name,Categories,Difficulty',
+      ...entries.map(e => {
+        const cats = (e.categories ?? []).join('|').replace(/"/g, '""')
+        return `"${e.name.replace(/"/g, '""')}","${cats}",${e.difficulty}`
+      })
     ]
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -72,13 +75,13 @@ export function useEntries() {
 
   /**
    * Bulk-inserts entries in a single IndexedDB transaction.
-   * @param {Array<{name: string, category: string, difficulty: number}>} entries
+   * @param {Array<{name: string, categories: string[], difficulty: number}>} newEntries
    */
   async function bulkAddEntries(newEntries) {
     const now = new Date().toISOString()
     const records = newEntries.map(e => ({
       name: e.name.trim(),
-      category: e.category.trim(),
+      categories: (e.categories ?? []).map(c => c.trim()).filter(Boolean),
       difficulty: e.difficulty,
       createdAt: now,
     }))
