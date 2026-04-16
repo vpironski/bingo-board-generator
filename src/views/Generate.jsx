@@ -11,12 +11,15 @@ export default function Generate() {
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
 
-  async function handleGenerate(options) {
+  async function handleGenerate({ selectedCategories, ...boardOptions }) {
     if (generating) return
     setError(null)
     setGenerating(true)
     try {
-      const boardId = await generateBoard(entries, options)
+      const pool = selectedCategories?.length
+        ? (entries ?? []).filter(e => (e.categories ?? []).some(c => selectedCategories.includes(c)))
+        : (entries ?? [])
+      const boardId = await generateBoard(pool, boardOptions)
       navigate(`/board/${boardId}`)
     } catch (err) {
       setError('Failed to generate board. Please try again.')

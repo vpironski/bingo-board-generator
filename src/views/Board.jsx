@@ -58,7 +58,9 @@ export default function Board() {
         </div>
       </div>
 
-      <BoardGrid cells={cells} size={board.size} onToggle={toggleCell} />
+      <div className="mx-auto w-full max-w-sm">
+        <BoardGrid cells={cells} size={board.size} onToggle={toggleCell} />
+      </div>
     </div>
   )
 }
