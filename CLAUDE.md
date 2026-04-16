@@ -117,8 +117,8 @@ db.version(1).stores({
   id: number,          // auto-incremented by Dexie
   name: string,        // e.g. "Eiffel Tower"
   category: string,    // e.g. "Sofia", "Trip", "Food"
-  difficulty: number,  // 1 (easy) – 5 (hard)
-  createdAt: string    // ISO timestamp
+  difficulty: 1 | 2 | 3 | 4, // 1=Easy, 2=Medium, 3=Hard, 4=Insane
+  createdAt: string           // ISO timestamp
 }
 ```
 
@@ -129,6 +129,7 @@ db.version(1).stores({
   id: number,          // auto-incremented
   size: number,        // e.g. 5 for a 5x5 board
   mode: "category" | "category+difficulty",
+  difficulty: 1 | 2 | 3 | 4, // board difficulty setting — drives entry spread (see DIFFICULTY_SPREAD)
   createdAt: string
 }
 ```
@@ -165,11 +166,26 @@ Denormalizing `name`, `category`, `difficulty` into `cells` avoids join queries 
 
 ### Mode 2: Category + Difficulty
 
-1. Group entries by category.
-2. Sort each group by difficulty ascending.
-3. Apply a **diagonal difficulty gradient**: easy entries (difficulty 1-2) placed towards top-left, hard (4-5) towards bottom-right.
-4. Run `difficultyBalancer.js` — swaps cells to ensure no single row or column is all-same-difficulty.
-5. Place FREE space at center cell with `marked: true`.
+1. Determine the target cell count per difficulty bucket using `DIFFICULTY_SPREAD[boardDifficulty]` (see table below).
+2. Sample entries from each bucket proportionally. If a bucket is undersized, redistribute its deficit to the nearest neighbouring bucket(s).
+3. Shuffle each bucket (Fisher-Yates).
+4. Group sampled entries by category, then interleave round-robin across categories to avoid clustering.
+5. Apply a **diagonal difficulty gradient**: easier entries placed towards top-left, harder entries towards bottom-right.
+6. Run `difficultyBalancer.js` — swaps cells to ensure no single row or column is all-same-difficulty.
+7. Place FREE space at center cell with `marked: true`.
+
+### Difficulty Spread Table (`src/logic/boardBuilder.js → DIFFICULTY_SPREAD`)
+
+The board difficulty selector controls which entry difficulties are pulled and in what proportion:
+
+| Board difficulty | Easy (1) | Medium (2) | Hard (3) | Insane (4) |
+|---|---|---|---|---|
+| Easy | 70% | 30% | — | — |
+| Medium | 20% | 55% | 25% | — |
+| Hard | — | 20% | 50% | 30% |
+| Insane | — | 5% | 30% | 65% |
+
+**Rationale:** Every board has neighbouring-difficulty entries so no difficulty tier feels totally isolated. Easy boards are still accessible but have Medium variety. Insane boards are brutal but not monotone.
 
 ### Hard Constraints
 
@@ -185,8 +201,9 @@ Denormalizing `name`, `category`, `difficulty` into `cells` avoids join queries 
 - **Tap a square** → toggles `marked` → cell turns red → immediately persisted via `db.cells.update(id, { marked })`.
 - **Long-press a square** → bottom sheet shows entry detail: name, category, difficulty badge.
 - **Export** → `html2canvas` captures the board `<div>` as PNG → triggers native iOS share sheet (save to Photos, share to iMessage, etc.).
-- **Bulk import** → paste CSV or plain text, one entry per line: `Name, Category, Difficulty`. Parser strips whitespace, validates difficulty is 1-5, skips malformed rows and reports them to the user.
+- **Bulk import** → paste CSV or plain text, one entry per line: `Name, Category, Difficulty`. Parser strips whitespace, validates difficulty is 1–4 (Easy/Medium/Hard/Insane), skips malformed rows and reports them to the user.
 - **Board size picker** → 3, 5, 7, 9 (odd only, enforced in UI).
+- **Board difficulty picker** → Easy / Medium / Hard / Insane. Controls entry spread via `DIFFICULTY_SPREAD` — not just which entries are included but the proportion from each level (see Difficulty Spread Table above).
 - **Saved entries** → the entry pool is always persisted. It is the core dataset of the app. Entries are never ephemeral.
 - **Saved boards** → generated boards also persist, but are secondary. A board can always be regenerated from entries; entries cannot be regenerated from boards.
 - **Delete entry** → warns if the entry is used in any saved board before deleting. Never silently delete.

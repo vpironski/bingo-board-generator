@@ -1,10 +1,9 @@
-const DIFF_COLORS = [
-  '',
-  'bg-green-100 text-green-700',
-  'bg-lime-100 text-lime-700',
-  'bg-yellow-100 text-yellow-700',
-  'bg-orange-100 text-orange-700',
-  'bg-red-100 text-red-700',
+const DIFF_META = [
+  null,
+  { label: 'Easy',   color: 'bg-green-100 text-green-700' },
+  { label: 'Medium', color: 'bg-yellow-100 text-yellow-700' },
+  { label: 'Hard',   color: 'bg-orange-100 text-orange-700' },
+  { label: 'Insane', color: 'bg-red-100 text-red-700' },
 ]
 
 function EditIcon() {
@@ -46,8 +45,8 @@ export default function EntryList({ entries, onEdit, onDelete }) {
             <p className="text-gray-900 font-medium text-sm truncate">{entry.name}</p>
             <p className="text-gray-400 text-xs truncate mt-0.5">{entry.category}</p>
           </div>
-          <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${DIFF_COLORS[entry.difficulty]}`}>
-            {entry.difficulty}
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${DIFF_META[entry.difficulty]?.color}`}>
+            {DIFF_META[entry.difficulty]?.label}
           </span>
           <button
             onClick={() => onEdit(entry)}

@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 
-const DIFFICULTIES = [1, 2, 3, 4, 5]
+const DIFFICULTIES = [
+  { value: 1, label: 'Easy' },
+  { value: 2, label: 'Medium' },
+  { value: 3, label: 'Hard' },
+  { value: 4, label: 'Insane' },
+]
 
 /**
  * @param {{ initial: import('../hooks/useEntries').Entry|null, onSubmit: Function, onCancel: Function }} props
@@ -8,7 +13,7 @@ const DIFFICULTIES = [1, 2, 3, 4, 5]
 export default function EntryForm({ initial = null, onSubmit, onCancel }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
-  const [difficulty, setDifficulty] = useState(3)
+  const [difficulty, setDifficulty] = useState(2)
 
   useEffect(() => {
     if (initial) {
@@ -18,7 +23,7 @@ export default function EntryForm({ initial = null, onSubmit, onCancel }) {
     } else {
       setName('')
       setCategory('')
-      setDifficulty(3)
+      setDifficulty(2)
     }
   }, [initial])
 
@@ -29,7 +34,7 @@ export default function EntryForm({ initial = null, onSubmit, onCancel }) {
     if (!initial) {
       setName('')
       setCategory('')
-      setDifficulty(3)
+      setDifficulty(2)
     }
   }
 
@@ -54,18 +59,18 @@ export default function EntryForm({ initial = null, onSubmit, onCancel }) {
       <div>
         <p className="text-xs font-medium text-gray-500 mb-2">Difficulty</p>
         <div className="flex gap-2">
-          {DIFFICULTIES.map(d => (
+          {DIFFICULTIES.map(({ value, label }) => (
             <button
-              key={d}
+              key={value}
               type="button"
-              onClick={() => setDifficulty(d)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                difficulty === d
+              onClick={() => setDifficulty(value)}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+                difficulty === value
                   ? 'bg-indigo-600 text-white'
                   : 'bg-gray-100 text-gray-500'
               }`}
             >
-              {d}
+              {label}
             </button>
           ))}
         </div>
