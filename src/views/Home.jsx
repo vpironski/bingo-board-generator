@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useEntries } from '../hooks/useEntries'
 import EntryForm from '../components/EntryForm'
 import EntryList from '../components/EntryList'
+import BulkImport from '../components/BulkImport'
 
 export default function Home() {
-  const { entries, addEntry, updateEntry, deleteEntry, exportCSV } = useEntries()
+  const { entries, addEntry, updateEntry, deleteEntry, exportCSV, bulkAddEntries } = useEntries()
   const [editing, setEditing] = useState(null)
+  const [showImport, setShowImport] = useState(false)
 
   async function handleSubmit(data) {
     if (editing) {
@@ -16,18 +18,36 @@ export default function Home() {
     }
   }
 
+  if (showImport) {
+    return (
+      <BulkImport
+        bulkAddEntries={bulkAddEntries}
+        onImport={() => setShowImport(false)}
+        onCancel={() => setShowImport(false)}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col px-4 pt-6 pb-24">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-gray-900">Entries</h1>
-        {entries?.length > 0 && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={exportCSV}
+            onClick={() => setShowImport(true)}
             className="text-xs text-indigo-600 font-medium px-3 py-1.5 rounded-lg bg-indigo-50"
           >
-            Export CSV
+            Bulk Import
           </button>
-        )}
+          {entries?.length > 0 && (
+            <button
+              onClick={exportCSV}
+              className="text-xs text-gray-500 font-medium px-3 py-1.5 rounded-lg bg-gray-100"
+            >
+              Export CSV
+            </button>
+          )}
+        </div>
       </div>
 
       <EntryForm

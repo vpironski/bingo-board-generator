@@ -70,5 +70,20 @@ export function useEntries() {
     URL.revokeObjectURL(url)
   }
 
-  return { entries, addEntry, updateEntry, deleteEntry, exportCSV }
+  /**
+   * Bulk-inserts entries in a single IndexedDB transaction.
+   * @param {Array<{name: string, category: string, difficulty: number}>} entries
+   */
+  async function bulkAddEntries(newEntries) {
+    const now = new Date().toISOString()
+    const records = newEntries.map(e => ({
+      name: e.name.trim(),
+      category: e.category.trim(),
+      difficulty: e.difficulty,
+      createdAt: now,
+    }))
+    await db.entries.bulkAdd(records)
+  }
+
+  return { entries, addEntry, updateEntry, deleteEntry, exportCSV, bulkAddEntries }
 }
