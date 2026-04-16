@@ -100,17 +100,19 @@ export function parseCSV(rawString) {
 
   if (!rows.length) return { valid: [], skipped: [] }
 
-  // Detect and skip header row
+  // Detect and skip header row; track offset so line numbers in skip reasons are accurate
   let dataRows = rows
+  let lineOffset = 1 // line number of first data row (1-indexed)
   if (rows[0][0]?.trim().toLowerCase() === 'name') {
     dataRows = rows.slice(1)
+    lineOffset = 2
   }
 
   const valid = []
   const skipped = []
 
   dataRows.forEach((row, i) => {
-    const lineNum = i + 2 // 1-indexed, accounting for header
+    const lineNum = i + lineOffset
 
     if (row.length < 3) {
       skipped.push(`Line ${lineNum}: expected 3 columns, got ${row.length}`)
@@ -154,4 +156,34 @@ export function generateTemplate() {
     'Mount Fuji,Japan,Hard',
     'Pasta Carbonara,Food,Medium',
   ].join('\r\n') + '\r\n'
+}
+
+/**
+ * Reads a File object as text and parses it as CSV.
+ * Encapsulates FileReader I/O so components stay logic-free.
+ * @param {File} file
+ * @returns {Promise<{ valid: Array<{name: string, category: string, difficulty: number}>, skipped: string[] }>}
+ */
+export function parseCSVFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = evt => resolve(parseCSV(evt.target.result))
+    reader.onerror = () => reject(new Error('Could not read the file.'))
+    reader.readAsText(file)
+  })
+}
+
+/**
+ * Generates the CSV template and triggers a browser download.
+ * Encapsulates all I/O for template download so components stay logic-free.
+ */
+export function downloadTemplate() {
+  const csv = generateTemplate()
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'bingo-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
 }

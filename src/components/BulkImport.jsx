@@ -1,15 +1,5 @@
 import { useState, useRef } from 'react'
-import { parseCSV, generateTemplate } from '../utils/csvParser'
-
-function downloadBlob(content, filename, mime) {
-  const blob = new Blob([content], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
+import { parseCSVFile, downloadTemplate } from '../utils/csvParser'
 
 /**
  * @param {{ bulkAddEntries: Function, onImport: Function, onCancel: Function }} props
@@ -21,23 +11,17 @@ export default function BulkImport({ bulkAddEntries, onImport, onCancel }) {
   const [importError, setImportError] = useState(null)
   const fileInputRef = useRef(null)
 
-  function handleDownloadTemplate() {
-    downloadBlob(generateTemplate(), 'bingo-template.csv', 'text/csv')
-  }
-
-  function handleFileChange(e) {
+  async function handleFileChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name)
     setParseResult(null)
     setImportError(null)
-
-    const reader = new FileReader()
-    reader.onload = evt => {
-      setParseResult(parseCSV(evt.target.result))
+    try {
+      setParseResult(await parseCSVFile(file))
+    } catch (err) {
+      setImportError(err.message)
     }
-    reader.onerror = () => setImportError('Could not read the file.')
-    reader.readAsText(file)
   }
 
   async function handleImport() {
@@ -71,7 +55,7 @@ export default function BulkImport({ bulkAddEntries, onImport, onCancel }) {
           Open it in Numbers, Google Sheets, or Excel. Fill in your entries, then save as CSV.
         </p>
         <button
-          onClick={handleDownloadTemplate}
+          onClick={downloadTemplate}
           className="w-full py-3 rounded-xl bg-indigo-50 text-indigo-600 font-semibold text-sm"
         >
           Download Template
@@ -103,12 +87,16 @@ export default function BulkImport({ bulkAddEntries, onImport, onCancel }) {
       {/* Step 3 — Preview + confirm */}
       {parseResult && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <p className="text-sm font-semibold text-gray-800 mb-1">
-            {parseResult.valid.length} {parseResult.valid.length === 1 ? 'entry' : 'entries'} ready to import
-            {parseResult.skipped.length > 0 && (
-              <span className="text-red-500"> · {parseResult.skipped.length} skipped</span>
-            )}
-          </p>
+          {parseResult.valid.length === 0 && parseResult.skipped.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-2">No entries found in this file.</p>
+          ) : (
+            <p className="text-sm font-semibold text-gray-800 mb-1">
+              {parseResult.valid.length} {parseResult.valid.length === 1 ? 'entry' : 'entries'} ready to import
+              {parseResult.skipped.length > 0 && (
+                <span className="text-red-500"> · {parseResult.skipped.length} skipped</span>
+              )}
+            </p>
+          )}
 
           {parseResult.skipped.length > 0 && (
             <ul className="mt-2 mb-4 flex flex-col gap-1">
