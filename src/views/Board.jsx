@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useBoardLive } from '../hooks/useBoard'
 import BoardGrid from '../components/BoardGrid'
+import ExportButton from '../components/ExportButton'
 
 const DIFF_LABELS = { 1: 'Easy', 2: 'Medium', 3: 'Hard', 4: 'Insane' }
 const MODE_LABELS = { 'category': 'Category', 'category+difficulty': 'Cat + Difficulty' }
@@ -37,6 +38,7 @@ export default function Board() {
   const markedCount = cells.filter(c => c.marked && c.entryId !== null).length
   const totalReal = cells.filter(c => c.entryId !== null).length
   const date = new Date(board.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  const filename = `bingo-${board.size}x${board.size}`
 
   return (
     <div className="flex flex-col px-4 pt-4 pb-24">
@@ -56,6 +58,7 @@ export default function Board() {
           </p>
           <p className="text-xs text-gray-400">{date} · {markedCount}/{totalReal} marked</p>
         </div>
+        <ExportButton cells={cells} size={board.size} filename={filename} />
       </div>
 
       <div className="mx-auto w-full max-w-sm">

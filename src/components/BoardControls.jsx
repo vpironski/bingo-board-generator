@@ -88,8 +88,8 @@ export default function BoardControls({ entries, onGenerate, generating = false 
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-gray-700">Free Center</p>
         <button type="button" onClick={() => setFreeCenter(v => !v)}
-          className={`relative w-12 h-6 rounded-full transition-colors ${freeCenter ? 'bg-indigo-600' : 'bg-gray-200'}`}>
-          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${freeCenter ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          className={`relative w-12 h-6 rounded-full transition-colors overflow-hidden ${freeCenter ? 'bg-indigo-600' : 'bg-gray-200'}`}>
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${freeCenter ? 'translate-x-6' : 'translate-x-0'}`} />
         </button>
       </div>
 
